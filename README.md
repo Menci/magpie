@@ -38,8 +38,8 @@ For the 2st problem, we can learn routes from the NDP responses (NA). Once recev
 Install dependencies:
 
 ```bash
-apt install -y libpcap-dev libfmt-dev # Ubuntu or Debian
-pacman -Sy libpcap fmt                # Archlinux
+apt install -y libpcap-dev # Ubuntu or Debian
+pacman -Sy libpcap         # Archlinux
 ```
 
 Build with CMake:

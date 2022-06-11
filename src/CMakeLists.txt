@@ -9,6 +9,6 @@ target_link_libraries(
     magpie
     ${CMAKE_BINARY_DIR}/vendor/libtins/lib/libtins.a
     pcap
-    fmt
+    ${CMAKE_BINARY_DIR}/vendor/fmt/libfmtd.a
 )
-add_dependencies(magpie tins)
+add_dependencies(magpie tins fmt)

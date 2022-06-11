@@ -1,3 +1,6 @@
 [submodule "vendor/libtins"]
 	path = vendor/libtins
 	url = ../../mfontanini/libtins.git
+[submodule "vendor/fmt"]
+	path = vendor/fmt
+	url = ../../fmtlib/fmt.git

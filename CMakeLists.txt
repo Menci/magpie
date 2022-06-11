@@ -40,6 +40,10 @@ option(LIBTINS_ENABLE_TCP_STREAM_CUSTOM_DATA "" OFF)
 add_subdirectory(vendor/libtins)
 include_directories(vendor/libtins/include)
 
+# fmt
+add_subdirectory(vendor/fmt)
+include_directories(vendor/fmt/include)
+
 add_subdirectory(src)
 
 set(EXECUTABLE_OUTPUT_PATH ${PROJECT_BINARY_DIR}/bin)
