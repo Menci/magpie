@@ -42,6 +42,13 @@ apt install -y libpcap-dev # Ubuntu or Debian
 pacman -Sy libpcap         # Archlinux
 ```
 
+Clone this repo with `--recursive`:
+
+```bash
+git clone https://github.com/Menci/magpie --recursive
+cd magpie
+```
+
 Build with CMake:
 
 ```bash
