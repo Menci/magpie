@@ -42,6 +42,7 @@ add_subdirectory(vendor/libtins)
 include_directories(vendor/libtins/include)
 
 # fmt
+set(FMT_DEBUG_POSTFIX "" CACHE STRING "")
 add_subdirectory(vendor/fmt)
 include_directories(vendor/fmt/include)
 
