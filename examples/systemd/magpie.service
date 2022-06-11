@@ -1,0 +1,10 @@
+[Unit]
+Description=Magpie IPv6 relay service
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/bin/bash -c "/usr/bin/magpie $((cat /etc/magpie.conf 2>/dev/null || echo --help) | xargs)"
+
+[Install]
+WantedBy=multi-user.target
