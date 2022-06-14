@@ -72,8 +72,6 @@ void Sniffer::onPacket(std::shared_ptr<Interface> interface, Tins::PDU &pdu) {
 
             // Forward multicast NA to other interfaces
             if (ip6.dst_addr().is_multicast()) {
-                Logger::info("ETH {} -> {}", eth.src_addr(), eth.dst_addr());
-                Logger::info("IP6 {} -> {}", ip6.src_addr(), ip6.dst_addr());
                 for (const auto &[name, forwardTo] : Interface::interfaces) {
                     if (forwardTo == interface) continue;
 
