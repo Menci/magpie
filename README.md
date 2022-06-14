@@ -74,6 +74,12 @@ It sets alarm and check for the timeout of routes in each `--alarm-interval, -a`
 magpie -i wan,br-lan -a 10 -p 60 -r 5
 ```
 
+It's better to provide a `--routes-save-file` to save the routes to file on exit and load (reprobe) them on start. This helps reduce the IPv6 network down time between your restarts of the daemon.
+
+```bash
+magpie -i wan,br-lan -f /var/lib/magpie/saved-routes.json
+```
+
 ## Security Notice
 
 This project aims on using in homelab / school network in which the hosts are trusted. **Don't use it in a public / untrusted network** since it maintains routing states without any security measure. Attacks like NDP hijacking and routing table DDoS could be done easily.
