@@ -13,8 +13,9 @@
 #include "Queue.h"
 #include "Utils.h"
 #include "Interface.h"
-#include "NeighborSolicitation.h"
+#include "NDP.h"
 #include "RouteManager.h"
+#include "RequestManager.h"
 
 Queue<std::pair<const std::shared_ptr<Interface>, std::unique_ptr<Tins::PDU>>> queue;
 std::map<std::string, std::shared_ptr<Interface>> interfaces;
@@ -36,33 +37,64 @@ void onPacket(std::shared_ptr<Interface> interface, Tins::PDU &pdu) {
         }
 
         if (icmp6.type() == Tins::ICMPv6::NEIGHBOUR_SOLICIT) {
-            Logger::debug("NS target {}", icmp6.target_addr());
+            Logger::verbose("NS target {}", icmp6.target_addr());
             for (auto option : icmp6.options()) {
                 Logger::debug("NS Option {}: {}", (int)option.option(), toHex(option.data_ptr(), option.data_size()));
             }
 
-            for (const auto &[name, forwardTo] : interfaces) {
-                if (name == interface->name) continue;
+            auto onInterface = RouteManager::getRoute(icmp6.target_addr());
+            if (onInterface && onInterface != interface) {
+                // Reply
+                auto newPacket = makeNeighborAdvertisement(*interface, eth.src_addr(), ip6.src_addr(), icmp6.target_addr(), true);
+                Tins::PacketSender(interface->tinsInterface).send(newPacket);
+                
+                Logger::verbose("NS replied with unicast NA");
+            } else if (!onInterface) {
+                // Save to request manager for later respond
+                RequestManager::addRequest(
+                    eth.src_addr(),
+                    ip6.src_addr(),
+                    icmp6.target_addr(),
+                    interface
+                );
 
-                auto newPacket = makeNeighborSolicitation(*forwardTo, icmp6.target_addr());
-                Tins::PacketSender(forwardTo->tinsInterface).send(newPacket);
+                // Forward NS to other interfaces
+                for (const auto &[name, forwardTo] : interfaces) {
+                    if (name == interface->name) continue;
 
-                Logger::verbose("NS forwarded from [{}] to [{}]: {}", interface->name, forwardTo->name, icmp6.target_addr());
-            }        
+                    auto newPacket = makeNeighborSolicitation(*forwardTo, icmp6.target_addr());
+                    Tins::PacketSender(forwardTo->tinsInterface).send(newPacket);
+
+                    Logger::verbose("NS forwarded from [{}] to [{}]: {}", interface->name, forwardTo->name, icmp6.target_addr());
+                }
+            }
         } else {
-            Logger::debug("NA target {}", icmp6.target_addr());        
-            
+            Logger::verbose("NA target {}", icmp6.target_addr());
+            for (auto option : icmp6.options()) {
+                Logger::debug("NA Option {}: {}", (int)option.option(), toHex(option.data_ptr(), option.data_size()));
+            }
+
             RouteManager::addOrRefreshRoute(icmp6.target_addr(), interface);
 
-            for (const auto &[name, forwardTo] : interfaces) {
-                if (name == interface->name) continue;
+            // Forward multicast NA to other interfaces
+            if (ip6.dst_addr().is_multicast()) {
+                for (const auto &[name, forwardTo] : interfaces) {
+                    if (name == interface->name) continue;
 
-                eth.src_addr(forwardTo->tinsInterface.hw_address());
-                ip6.src_addr(forwardTo->linkLocal);
-                Tins::PacketSender(forwardTo->name).send(pdu);
+                    auto newPacket = makeNeighborAdvertisement(*interface, eth.dst_addr(), ip6.dst_addr(), icmp6.target_addr(), false);
+                    Tins::PacketSender(forwardTo->tinsInterface).send(newPacket);
 
-                Logger::verbose("NA forwarded from [{}] to [{}]: {}", interface->name, forwardTo->name, icmp6.target_addr());
+                    Logger::verbose("multicast NA forwarded from [{}] to [{}]: {}", interface->name, forwardTo->name, icmp6.target_addr());
+                }
             }
+
+            // Reply to earlier requests
+            RequestManager::matchAndRespond(icmp6.target_addr(), [&] (Tins::HWAddress<6> sourceMacAddress, Tins::IPv6Address sourceAddress, std::shared_ptr<Interface> fromInterface) {
+                auto newPacket = makeNeighborAdvertisement(*fromInterface, sourceMacAddress, sourceAddress, icmp6.target_addr(), true);
+                Tins::PacketSender(fromInterface->tinsInterface).send(newPacket);
+               
+                Logger::info("responded NA to NS for {} from [{}] {}", icmp6.target_addr(), interface->name, sourceAddress);
+            });
         }
     } else if (icmp6.type() == Tins::ICMPv6::DEST_UNREACHABLE) {
         auto &raw = icmp6.rfind_pdu<Tins::RawPDU>();
@@ -87,7 +119,7 @@ void onPacket(std::shared_ptr<Interface> interface, Tins::PDU &pdu) {
         }
 
         auto code = icmp6.code();
-        Logger::debug("DU code {}, target {}", code, target);
+        Logger::verbose("DU code {}, target {}", code, target);
 
         // Handle "No route to destination" and "Address unreachable" code
         if (!(code == 0 || code == 3)) return;

@@ -69,6 +69,12 @@ void RouteManager::addOrRefreshRoute(const Tins::IPv6Address &address, std::shar
     updateRouteTable(route, true);
 }
 
+std::shared_ptr<Interface> RouteManager::getRoute(const Tins::IPv6Address &address) {
+    auto it = routes.find(address);
+    if (it != routes.end()) return it->second->interface;
+    return nullptr;
+}
+
 void RouteManager::deleteRoute(std::shared_ptr<RouteItem> item) {
     updateRouteTable(item, false);
     routes.erase(item->itR);

@@ -40,4 +40,5 @@ class RouteManager {
 public:
     static void initialize(size_t checkInterval, size_t probeInterval, size_t probeRetries, bool preserveRoutesOnExit, std::function<void (Tins::IPv6Address, std::shared_ptr<Interface>)> probeCallback);
     static void addOrRefreshRoute(const Tins::IPv6Address &address, std::shared_ptr<Interface> interface);
+    static std::shared_ptr<Interface> getRoute(const Tins::IPv6Address &address);
 };
