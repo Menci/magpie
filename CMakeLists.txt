@@ -46,6 +46,9 @@ set(FMT_DEBUG_POSTFIX "" CACHE STRING "")
 add_subdirectory(vendor/fmt)
 include_directories(vendor/fmt/include)
 
+# cereal
+include_directories(vendor/cereal/include)
+
 add_subdirectory(src)
 
 set(EXECUTABLE_OUTPUT_PATH ${PROJECT_BINARY_DIR}/bin)

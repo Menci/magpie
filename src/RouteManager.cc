@@ -1,16 +1,24 @@
 #include "RouteManager.h"
 
-#include <iostream>
+#include <fstream>
 #include <memory>
+#include <vector>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 #include <unistd.h>
 #include <fmt/format.h>
+#include <cereal/archives/json.hpp>
+#include <cereal/types/vector.hpp>
 
 #include "Ensure/Ensure.h"
 #include "Logger.h"
+#include "Interface.h"
 
 size_t RouteManager::checkInterval;
 size_t RouteManager::probeInterval;
 size_t RouteManager::probeRetries;
+std::string RouteManager::routesSaveFile;
 std::function<void (Tins::IPv6Address, std::shared_ptr<Interface>)> RouteManager::probeCallback;
 
 std::unordered_map<Tins::IPv6Address, std::shared_ptr<RouteManager::RouteItem>> RouteManager::routes;
@@ -20,24 +28,38 @@ void RouteManager::initialize(
     size_t checkInterval,
     size_t probeInterval,
     size_t probeRetries,
-    bool preserveRoutesOnExit,
+    const std::string &routesSaveFile,
     std::function<void (Tins::IPv6Address, std::shared_ptr<Interface>)> probeCallback
 ) {
     RouteManager::checkInterval = checkInterval;
     RouteManager::probeInterval = probeInterval;
     RouteManager::probeRetries = probeRetries;
+    RouteManager::routesSaveFile = routesSaveFile;
     RouteManager::probeCallback = probeCallback;
 
     // Set POSIX timer
     ENSURE_ERRNO(signal(SIGALRM, processTimerTick));
     setTimer();
 
-    if (preserveRoutesOnExit) {
-        Logger::warning("preserveRoutesOnExit enabled, this may cause routing table resource leak");
+    if (routesSaveFile.empty()) {
+        Logger::warning("no route save file specfied, restarting will lose route info and cause network delay on next start");
     } else {
-        // Remove ALL managed routes on exit
-        ENSURE_ERRNO(std::atexit(RouteManager::deleteAllRoutesOnExit));
+        // Ensure file read & writable
+        int fd;
+        ENSURE_ERRNO(fd = open(routesSaveFile.c_str(), O_RDWR | O_CREAT, 0644));
+
+        // Get file size
+        struct stat fileStat;
+        fstat(fd, &fileStat);
+        auto fileSize = fileStat.st_size;
+
+        // Close file
+        close(fd);
+
+        if (fileSize > 0) loadRoutes();
     }
+
+    ENSURE_ERRNO(std::atexit(RouteManager::onExit));
 }
 
 void RouteManager::addOrRefreshRoute(const Tins::IPv6Address &address, std::shared_ptr<Interface> interface) {
@@ -130,11 +152,75 @@ void RouteManager::processTimerTick(int) {
     setTimer();
 }
 
-void RouteManager::deleteAllRoutesOnExit() {
+void RouteManager::onExit() {
+    saveRoutes();
+
+    // Delete routes on system routing table
     for (const auto [_, route] : routeExpiration) {
         updateRouteTable(route, false);
     }
 
     // The process won't exit without this line
     _exit(0);
+}
+
+struct SerializedRoute {
+    Tins::IPv6Address address;
+    std::shared_ptr<Interface> interface;
+
+    template <class Archive>
+    void save(Archive &archive) const {
+        archive(address.to_string(), interface->name);
+    }
+
+    template <class Archive>
+    void load(Archive &archive) {
+        std::string address, interfaceName;
+        archive(address, interfaceName);
+        
+        this->address = address;
+
+        auto it = Interface::interfaces.find(interfaceName);
+        if (it != Interface::interfaces.end()) {
+            this->interface = it->second;
+        } else {
+            Logger::warning("found previous route on unknown interface [{}]: {}", interfaceName, address);
+        }
+    }
+};
+
+void RouteManager::saveRoutes() {
+    if (routesSaveFile.empty()) return;
+
+    Logger::info("saving current routes to file");
+
+    std::vector<SerializedRoute> savedRoutes;
+    for (const auto [_, route] : routeExpiration) {
+        savedRoutes.push_back({route->address, route->interface});
+    }
+
+    std::ofstream file(routesSaveFile);
+    cereal::JSONOutputArchive archive(file);
+    archive(CEREAL_NVP(savedRoutes));
+}
+
+void RouteManager::loadRoutes() {
+    if (routesSaveFile.empty()) return;
+
+    Logger::info("loading saved routes from file");
+
+    std::vector<SerializedRoute> savedRoutes;
+
+    std::ifstream file(routesSaveFile);
+    cereal::JSONInputArchive archive(file);
+    archive(CEREAL_NVP(savedRoutes));
+
+    for (const auto &route : savedRoutes) {
+        if (!route.interface) {
+            continue;
+        }
+
+        Logger::verbose("loaded route [{}]: {}", route.interface->name, route.address);
+        probeCallback(route.address, route.interface);
+    }
 }

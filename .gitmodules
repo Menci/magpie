@@ -4,3 +4,6 @@
 [submodule "vendor/fmt"]
 	path = vendor/fmt
 	url = ../../fmtlib/fmt.git
+[submodule "vendor/cereal"]
+	path = vendor/cereal
+	url = ../../USCiLab/cereal

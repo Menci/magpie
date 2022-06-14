@@ -71,11 +71,11 @@ Arguments parseArguments(int argc, char *argv[]) {
             true, "5"
         )
         .addOption(
-            "preserve-routes-on-exit", "",
-            "",
-            "Don't delete routes learnt from NDP on exit. Will reduce downtime on service restarting but may lead to route table resource leak.",
-            ArgumentParser::boolParser(arguments.preserveRoutesOnExit),
-            true
+            "routes-save-file", "f",
+            "path",
+            "The file to save current routes info between restarts.",
+            ArgumentParser::stringParser(arguments.routesSaveFile),
+            true, ""
         )
         .parse();
     return arguments;

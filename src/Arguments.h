@@ -11,7 +11,7 @@ struct Arguments {
     size_t alarmInterval;
     size_t routeProbeInterval;
     size_t routeProbeRetries;
-    bool preserveRoutesOnExit;
+    std::string routesSaveFile;
 };
 
 Arguments parseArguments(int argc, char *argv[]);

@@ -24,6 +24,7 @@ class RouteManager {
     static size_t checkInterval;
     static size_t probeInterval;
     static size_t probeRetries;
+    static std::string routesSaveFile;
     static std::function<void (Tins::IPv6Address, std::shared_ptr<Interface>)> probeCallback;
 
     static std::unordered_map<Tins::IPv6Address, std::shared_ptr<RouteItem>> routes;
@@ -35,10 +36,12 @@ class RouteManager {
 
     static void setTimer();
     static void processTimerTick(int);
-    static void deleteAllRoutesOnExit();
+    static void saveRoutes();
+    static void loadRoutes();
+    static void onExit();
 
 public:
-    static void initialize(size_t checkInterval, size_t probeInterval, size_t probeRetries, bool preserveRoutesOnExit, std::function<void (Tins::IPv6Address, std::shared_ptr<Interface>)> probeCallback);
+    static void initialize(size_t checkInterval, size_t probeInterval, size_t probeRetries, const std::string &routesSaveFile, std::function<void (Tins::IPv6Address, std::shared_ptr<Interface>)> probeCallback);
     static void addOrRefreshRoute(const Tins::IPv6Address &address, std::shared_ptr<Interface> interface);
     static std::shared_ptr<Interface> getRoute(const Tins::IPv6Address &address);
 };
