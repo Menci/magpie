@@ -17,4 +17,8 @@ struct Interface {
     Interface(const std::string &name);
 
     static void initialize(const std::string &interfaceName);
+    static std::shared_ptr<Interface> getLoopback();
+
+private:
+    Interface(bool loopback);
 };

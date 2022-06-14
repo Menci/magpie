@@ -6,6 +6,7 @@
 #include <fmt/format.h>
 
 #include "Ensure/Ensure.h"
+#include "Interface.h"
 #include "Logger.h"
 #include "NDP.h"
 #include "RouteManager.h"
@@ -53,7 +54,7 @@ void Sniffer::onPacket(std::shared_ptr<Interface> interface, Tins::PDU &pdu) {
 
                 // Forward NS to other interfaces
                 for (const auto &[name, forwardTo] : Interface::interfaces) {
-                    if (name == interface->name) continue;
+                    if (forwardTo == interface) continue;
 
                     auto newPacket = makeNeighborSolicitation(*forwardTo, icmp6.target_addr());
                     Tins::PacketSender(forwardTo->tinsInterface).send(newPacket);
@@ -74,7 +75,7 @@ void Sniffer::onPacket(std::shared_ptr<Interface> interface, Tins::PDU &pdu) {
                 Logger::info("ETH {} -> {}", eth.src_addr(), eth.dst_addr());
                 Logger::info("IP6 {} -> {}", ip6.src_addr(), ip6.dst_addr());
                 for (const auto &[name, forwardTo] : Interface::interfaces) {
-                    if (name == interface->name) continue;
+                    if (forwardTo == interface) continue;
 
                     auto newPacket = makeNeighborAdvertisement(*interface, eth.dst_addr(), ip6.dst_addr(), icmp6.target_addr(), false);
                     Tins::PacketSender(forwardTo->tinsInterface).send(newPacket);
@@ -116,11 +117,8 @@ void Sniffer::onPacket(std::shared_ptr<Interface> interface, Tins::PDU &pdu) {
         auto code = icmp6.code();
         Logger::verbose("DU code {}, target {}", code, target);
 
-        // Handle "No route to destination" and "Address unreachable" code
-        if (!(code == 0 || code == 3)) return;
-
         for (const auto &[name, forwardTo] : Interface::interfaces) {
-            if (name == interface->name) continue;
+            if (forwardTo == interface) continue;
 
             auto newPacket = makeNeighborSolicitation(*forwardTo, target);
             Tins::PacketSender(forwardTo->tinsInterface).send(newPacket);
@@ -140,6 +138,8 @@ void Sniffer::initialize() {
 
     for (auto [_, interface] : Interface::interfaces)
         startOnInterface(interface, filterExceptLocalMacAddresses);
+
+    startOnInterface(Interface::getLoopback(), "");
 }
 
 void Sniffer::startOnInterface(std::shared_ptr<Interface> interface, const std::string &filterExceptLocalMacAddresses) {
@@ -151,15 +151,25 @@ void Sniffer::startOnInterface(std::shared_ptr<Interface> interface, const std::
         auto macAddress = interface->tinsInterface.hw_address().to_string();
         Logger::info("listening on interface: {} [{}]", interface->name, macAddress);
 
-        static const auto FILTER = (
+        constexpr auto FILTER = (
             "icmp6 and ("
                 // NS or NA, NOT send from this host
                 "((ip6[40] = 135 or ip6[40] = 136) and {0}) or "
-                // DU, send from this host
-                "((ip6[40] = 1) and ether src {1})"
+                // DU (0 "No route to destination" and 3 "Address unreachable"), send from this host
+                "((ip6[40] = 1 and (ip6[41] = 0 or ip6[41] = 3)) and ether src {1})"
             ")"
         );
-        auto filter = fmt::format(FILTER, filterExceptLocalMacAddresses, macAddress);
+        constexpr auto FILTER_LO = (
+            "icmp6 and ("
+                // DU (0 "No route to destination" and 3 "Address unreachable")
+                "ip6[40] = 1 and (ip6[41] = 0 or ip6[41] = 3)"
+            ")"
+        );
+
+        auto filter =
+            interface->name == "lo"
+            ? FILTER_LO
+            : fmt::format(FILTER, filterExceptLocalMacAddresses, macAddress);
         Logger::info("pcap filter '{}'", filter);
 
         Tins::Sniffer sniffer(interface->name);
